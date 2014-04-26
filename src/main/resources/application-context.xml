@@ -1,0 +1,63 @@
+<beans xmlns="http://www.springframework.org/schema/beans"
+	   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:axon="http://www.axonframework.org/schema/core"
+	   xmlns:context="http://www.springframework.org/schema/context"
+	   xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+                        http://www.axonframework.org/schema/core http://www.axonframework.org/schema/axon-core-2.0.xsd
+                        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.2.xsd">
+
+	<context:component-scan base-package="org.athend.axon.simple" />
+
+	<axon:annotation-config />
+	
+	<!-- configure command bus as normal bean -->
+	<bean id="commandBus" class="org.axonframework.commandhandling.SimpleCommandBus"></bean>
+	<!-- configure event bus on axon namespace -->
+	<axon:event-bus id="eventBus" />
+	<!-- 
+		axon resource injector (used for Saga, make sure your saga has setter methods on command bus and event bus, otherwise
+		Spring resource injector gets screwed uo	
+	-->
+	<bean id="resourceInjector" class="org.axonframework.saga.spring.SpringResourceInjector" />
+	<!-- 
+		you can use normal QuartzEvent scheculer instead of the factory bean, but this makes the quartz scheduler 
+		lifecycle managed by the Spring container. If you didn't do this, your Quartz scheduler wouldn't die when Spring context dies.
+	-->
+	<bean id="schedulerFactoryBean" class="org.springframework.scheduling.quartz.SchedulerFactoryBean"/>
+	<!-- Event scheduler for the saga -->
+	<bean id="axonEventScheduler" class="org.axonframework.eventhandling.scheduling.quartz.QuartzEventScheduler">
+		<property name="eventBus" ref="eventBus"></property>
+		<property name="scheduler" ref="schedulerFactoryBean"></property>
+	</bean>
+	
+	<!-- 
+		Saga Configuration. With this config, the saga would default to an in-memory saga repository. If you want it to survive reboots,
+		use other saga repository implementation: http://www.axonframework.org/docs/2.0/sagas.html
+	-->
+	<axon:saga-manager id="sagaManager" event-bus="eventBus" resource-injector="resourceInjector">
+		<axon:types>org.athend.axon.simple.domain.UserLockSaga</axon:types>
+	</axon:saga-manager>
+	
+	<!-- Event Store configuration -->
+	<bean id="eventStore" class="org.axonframework.eventstore.fs.FileSystemEventStore">
+		<!-- Easiest to use, of course, probably is not suited for production -->
+		<constructor-arg ref="eventFileResolver" />
+	</bean>
+	
+	<bean id="eventFileResolver" class="org.axonframework.eventstore.fs.SimpleEventFileResolver">
+		<constructor-arg ref="baseDir" />
+	</bean>
+	
+	<bean class="java.io.File" id="baseDir">
+		<constructor-arg value="/some/location/"/>
+	</bean>
+	
+	<!-- Command gateway config -->
+	<bean class="org.axonframework.commandhandling.gateway.CommandGatewayFactoryBean">
+		<property name="commandBus" ref="commandBus" />
+	</bean>
+	
+	<!-- Domain Repo configuration -->
+	<axon:event-sourcing-repository id="userRepository" aggregate-type="org.athend.axon.simple.domain.User"></axon:event-sourcing-repository>
+	
+	
+</beans>
